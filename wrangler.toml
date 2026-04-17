@@ -9,3 +9,8 @@ APP_ENV = "production"
 binding = "DB"
 database_name = "otp-db"
 database_id = "3ea66fec-3c64-4916-9ec5-69aaabd93e32"
+
+[observability]
+[observability.logs]
+enabled = false
+invocation_logs = true
