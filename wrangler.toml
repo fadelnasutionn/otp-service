@@ -4,6 +4,8 @@ compatibility_date = "2025-04-01"
 
 [vars]
 APP_ENV = "production"
+WABA_NUMBER = "6285155330089"
+TELEGRAM_BOT = "fdv_devbot"
 
 [[d1_databases]]
 binding = "DB"
