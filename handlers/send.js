@@ -11,10 +11,10 @@ export async function handleSendOtp(req, env) {
     return new Response(JSON.stringify({ success: false, message: 'Invalid JSON body' }), { status: 400 });
   }
 
-  const { channel, mobile_number, email, turnstile_token } = body;
+  const { channel, value, email, turnstile_token } = body;
   const clientType = req.headers.get('X-Client-Type') || 'web';
 
-  if (!channel || (!mobile_number && !email)) {
+  if (!channel || !value) {
     return new Response(JSON.stringify({ success: false, message: 'Missing required fields' }), { status: 400 });
   }
 
@@ -43,10 +43,11 @@ export async function handleSendOtp(req, env) {
   try {
     const data = await env.DB.prepare(`
       SELECT id, link, expiredAt FROM otp_service
-      WHERE mobile_number = ? AND status IN ('created')
+      WHERE value = ?
+        AND status = 'created'
       ORDER BY createdAt DESC
       LIMIT 1
-    `).bind(mobile_number ?? null).first();
+    `).bind(value).first();
 
     if (data) {
       const expiredAt = new Date(data.expiredAt);
@@ -59,25 +60,26 @@ export async function handleSendOtp(req, env) {
   }
 
   let link = '';
-  if (channel === 'whatsapp' && mobile_number) {
-    link = `https://wa.me/6285155330089?text=${encodeURIComponent(copywriting)}`;
-  } else if (channel === 'telegram' && mobile_number) {
-    const botName = env.TELEGRAM_BOT_NAME || 'ritterlanze_bot';
-    link = `https://t.me/${botName}?text=${encodeURIComponent(copywriting)}`;
+  const wabaNumber = env.WABA_NUMBER;
+  const teleBotUsername = env.TELEGRAM_BOT;
+
+  if (channel === 'whatsapp') {
+    link = `https://wa.me/${wabaNumber}?text=${encodeURIComponent(copywriting)}`;
+  } else if (channel === 'telegram') {
+    link = `https://t.me/${teleBotUsername}?text=${encodeURIComponent(copywriting)}`;
   }
 
   try {
     await env.DB.prepare(`
       INSERT INTO otp_service (
-        id, channel, mobile_number, email, code, otp, link,
+        id, channel, value, code, otp, link,
         status, createdAt, updatedAt, expiredAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id,
       channel,
-      mobile_number ?? null,
-      email ?? null,
+      value,
       hashedCode,
       null,
       link,

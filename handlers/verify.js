@@ -30,9 +30,9 @@ export async function handleVerifyOtp(req, env) {
 
 async function verifyCode(body, env) {
 
-  const { mobile_number, code } = body;
+  const { value, code } = body;
 
-  if (!code || !mobile_number) {
+  if (!code || !value) {
     return new Response(JSON.stringify({ success: false, message: 'Missing required fields' }), { status: 400 });
   }
 
@@ -42,12 +42,12 @@ async function verifyCode(body, env) {
   try {
     const result = await env.DB.prepare(`
       SELECT id, status, otp, expiredAt FROM otp_service
-      WHERE mobile_number = ? AND code = ?
+      WHERE value = ? AND code = ?
       LIMIT 1
-    `).bind(mobile_number, hashedCode).first();
+    `).bind(value, hashedCode).first();
 
     if (!result) {
-      return new Response(JSON.stringify({ success: false, message: 'Invalid mobile number or code' }), { status: 404 });
+      return new Response(JSON.stringify({ success: false, message: 'Invalid value or code' }), { status: 404 });
     }
 
     if (result.status === 'verified') {
@@ -90,9 +90,9 @@ async function verifyCode(body, env) {
 
 async function verifyOtp(body, env) {
 
-  const { mobile_number, code, otp } = body;
+  const { value, code, otp } = body;
 
-  if (!code || !mobile_number || !otp) {
+  if (!code || !value || !otp) {
     return new Response(JSON.stringify({ success: false, message: 'Missing required fields' }), { status: 400 });
   }
 
@@ -103,12 +103,12 @@ async function verifyOtp(body, env) {
   try {
     const result = await env.DB.prepare(`
       SELECT id, status, expiredAt FROM otp_service
-      WHERE mobile_number = ? AND code = ? AND otp = ?
+      WHERE value = ? AND code = ? AND otp = ?
       LIMIT 1
-    `).bind(mobile_number, hashedCode, hashedOtp).first();
+    `).bind(value, hashedCode, hashedOtp).first();
 
     if (!result) {
-      return new Response(JSON.stringify({ success: false, message: 'Invalid mobile number, code, or OTP' }), { status: 404 });
+      return new Response(JSON.stringify({ success: false, message: 'Invalid value, code, or OTP' }), { status: 404 });
     }
 
     if (result.status === 'verified') {

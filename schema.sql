@@ -9,9 +9,10 @@ CREATE TABLE IF NOT EXISTS configs_service (
 
 CREATE TABLE IF NOT EXISTS otp_service (
   id TEXT PRIMARY KEY,
-  channel TEXT NOT NULL,
-  mobile_number TEXT,
-  email TEXT,
+  channel TEXT NOT NULL Check (
+    channel IN ('whatsapp', 'telegram','email')
+  ),
+  value TEXT NOT NULL,
   code TEXT,
   otp TEXT,
   link TEXT,
