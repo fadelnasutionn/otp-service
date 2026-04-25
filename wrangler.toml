@@ -6,6 +6,7 @@ compatibility_date = "2025-04-01"
 APP_ENV = "production"
 WABA_NUMBER = "6285155330089"
 TELEGRAM_BOT = "fdv_devbot"
+ALLOWED_ORIGINS = "http://localhost:5500,http://localhost:3000,http://192.168.110.143:5500"
 
 [[d1_databases]]
 binding = "DB"
