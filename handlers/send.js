@@ -1,6 +1,7 @@
-import { generateCode, generateHash } from '../lib/crypto.js';
+import { generateCode, generateOtp, generateHash } from '../lib/crypto.js';
 import { getOtpTtlMinutes } from '../lib/config.js';
 import { verifyTurnstile } from '../lib/turnstile.js';
+import { sendOtpEmail } from "../lib/mailgun.js";
 
 export async function handleSendOtp(req, env) {
   let body;
@@ -11,11 +12,26 @@ export async function handleSendOtp(req, env) {
     return new Response(JSON.stringify({ success: false, message: 'Invalid JSON body' }), { status: 400 });
   }
 
-  const { channel, value, email, turnstile_token } = body;
+  const { channel, value, turnstile_token } = body;
   const clientType = req.headers.get('X-Client-Type') || 'web';
 
   if (!channel || !value) {
     return new Response(JSON.stringify({ success: false, message: 'Missing required fields' }), { status: 400 });
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phoneRegex = /^\+?[0-9]{8,15}$/;
+
+  if (channel === 'email') {
+    if (!emailRegex.test(value)) {
+      return new Response(JSON.stringify({ success: false, message: 'Invalid email format' }), { status: 400 });
+    }
+  } else if (channel === 'whatsapp' || channel === 'telegram') {
+    if (!phoneRegex.test(value)) {
+      return new Response(JSON.stringify({ success: false, message: 'Invalid phone number format' }), { status: 400 });
+    }
+  } else {
+    return new Response(JSON.stringify({ success: false, message: 'Invalid channel' }), { status: 400 });
   }
 
   if (clientType === 'web') {
@@ -32,13 +48,27 @@ export async function handleSendOtp(req, env) {
   }
 
   const id = crypto.randomUUID();
-  const code = generateCode();
-  const hashedCode = await generateHash(code);
+
+  let code = null;
+  let hashedCode = null;
+  let otp = null;
+  let hashedOtp = null;
+
   const now = new Date();
   const ttlMinutes = await getOtpTtlMinutes(env);
   const expiredAt = new Date(now.getTime() + ttlMinutes * 60_000).toISOString();
 
-  const copywriting = `Please send this message unchanged! Enter the code you received directly on the verification screen.\n\n${code}`;
+  if (channel === 'email') {
+    otp = generateOtp();
+    hashedOtp = await generateHash(otp);
+  } else {
+    code = generateCode();
+    hashedCode = await generateHash(code);
+  }
+
+  const copywriting = code
+    ? `Please send this message unchanged! Enter the code you received directly on the verification screen.\n\n${code}`
+    : '';
 
   try {
     const data = await env.DB.prepare(`
@@ -67,6 +97,8 @@ export async function handleSendOtp(req, env) {
     link = `https://wa.me/${wabaNumber}?text=${encodeURIComponent(copywriting)}`;
   } else if (channel === 'telegram') {
     link = `https://t.me/${teleBotUsername}?text=${encodeURIComponent(copywriting)}`;
+  } else if (channel === 'email') {
+    link = '';
   }
 
   try {
@@ -81,7 +113,7 @@ export async function handleSendOtp(req, env) {
       channel,
       value,
       hashedCode,
-      null,
+      hashedOtp,
       link,
       'created',
       now.toISOString(),
@@ -89,11 +121,28 @@ export async function handleSendOtp(req, env) {
       expiredAt
     ).run();
 
+    if (channel === 'email') {
+      try {
+        await sendOtpEmail(env, value, otp, ttlMinutes);
+      } catch (err) {
+        await env.DB.prepare(`
+          DELETE FROM otp_service
+          WHERE id = ?
+        `).bind(id).run();
+
+        return new Response(JSON.stringify({
+          success: false,
+          message: 'Internal server error occurred while sending OTP!',
+          error: err.message
+        }), { status: 502 });
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       data: {
         id,
-        code,
+        code: code ?? undefined,
         link,
         expiredAt
       }

@@ -92,20 +92,49 @@ async function verifyOtp(body, env) {
 
   const { value, code, otp } = body;
 
-  if (!code || !value || !otp) {
+  if (!value || !otp) {
     return new Response(JSON.stringify({ success: false, message: 'Missing required fields' }), { status: 400 });
   }
 
-  const hashedCode = await generateHash(code);
   const hashedOtp = await generateHash(otp);
   const now = new Date().toISOString();
 
   try {
-    const result = await env.DB.prepare(`
-      SELECT id, status, expiredAt FROM otp_service
-      WHERE value = ? AND code = ? AND otp = ?
+    // Ambil record dulu untuk mengetahui channel-nya
+    const record = await env.DB.prepare(`
+      SELECT id, channel, status, code, expiredAt FROM otp_service
+      WHERE value = ?
+      ORDER BY createdAt DESC
       LIMIT 1
-    `).bind(value, hashedCode, hashedOtp).first();
+    `).bind(value).first();
+
+    if (!record) {
+      return new Response(JSON.stringify({ success: false, message: 'Invalid value, code, or OTP' }), { status: 404 });
+    }
+
+    let result;
+
+    if (record.channel === 'email') {
+      // Email: tidak ada code, cukup cocokkan otp saja
+      result = await env.DB.prepare(`
+        SELECT id, status, expiredAt FROM otp_service
+        WHERE value = ? AND otp = ?
+        LIMIT 1
+      `).bind(value, hashedOtp).first();
+    } else {
+      // WhatsApp/Telegram: alur lama, tetap wajib code
+      if (!code) {
+        return new Response(JSON.stringify({ success: false, message: 'Missing required fields' }), { status: 400 });
+      }
+
+      const hashedCode = await generateHash(code);
+
+      result = await env.DB.prepare(`
+        SELECT id, status, expiredAt FROM otp_service
+        WHERE value = ? AND code = ? AND otp = ?
+        LIMIT 1
+      `).bind(value, hashedCode, hashedOtp).first();
+    }
 
     if (!result) {
       return new Response(JSON.stringify({ success: false, message: 'Invalid value, code, or OTP' }), { status: 404 });
@@ -119,7 +148,9 @@ async function verifyOtp(body, env) {
       return new Response(JSON.stringify({ success: false, message: 'OTP has expired. Please request a new one' }), { status: 410 });
     }
 
-    if (result.status !== 'otp_sent') {
+    const expectedStatus = record.channel === 'email' ? 'created' : 'otp_sent';
+
+    if (result.status !== expectedStatus) {
       return new Response(JSON.stringify({ success: false, message: 'OTP is not ready for verification' }), { status: 400 });
     }
 
