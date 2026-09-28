@@ -96,7 +96,7 @@ export async function handleSendOtp(req, env) {
   if (channel === 'whatsapp') {
     link = `https://wa.me/${wabaNumber}?text=${encodeURIComponent(copywriting)}`;
   } else if (channel === 'telegram') {
-    link = `https://t.me/${teleBotUsername}?start=${encodeURIComponent(code)}`;
+    link = `https://t.me/${teleBotUsername}?text=${encodeURIComponent(copywriting)}`;
   } else if (channel === 'email') {
     link = '';
   }
